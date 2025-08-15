@@ -1,7 +1,13 @@
 import json
 import os
+import stat
+import sys
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+
+# Import resource_path function
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from main import resource_path
 
 def generate_xray_config(proxy_config: Dict[str, Any], tun_mode: bool = False) -> Dict[str, Any]:
     """
@@ -9,7 +15,7 @@ def generate_xray_config(proxy_config: Dict[str, Any], tun_mode: bool = False) -
     """
     # Try to load base configuration from base.json if it exists
     base_config = {}
-    base_path = Path(__file__).parent.parent / "base.json"
+    base_path = Path(resource_path("base.json"))
     if base_path.exists():
         try:
             with open(base_path, 'r') as f:

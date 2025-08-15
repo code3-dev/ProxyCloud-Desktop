@@ -128,8 +128,8 @@ class AdvancedSettingsDialog(QDialog):
             except Exception as e:
                 QMessageBox.warning(self, "Warning", f"Failed to load settings: {e}")
         
-        # If not found in settings.json, try base.json
-        base_path = Path("base.json")
+        # If not found in settings.json, try default.json
+        base_path = Path(resource_path("default.json"))
         if base_path.exists():
             try:
                 with open(base_path, "r") as f:
@@ -170,7 +170,7 @@ class AdvancedSettingsDialog(QDialog):
         
         # Load default settings from default.json
         try:
-            base_path = Path("default.json")
+            base_path = Path(resource_path("default.json"))
 
             if base_path.exists():
                 with open(base_path, "r") as f:
@@ -194,11 +194,11 @@ class AdvancedSettingsDialog(QDialog):
                 # Keep outbound as is (read-only)
                 self.outbound_editor.setText(json.dumps(current_outbound, indent=4))
                 
-                QMessageBox.information(self, "Reset Complete", "Settings have been reset to default values from base.json.")
+                QMessageBox.information(self, "Reset Complete", "Settings have been reset to default values from default.json.")
             else:
-                QMessageBox.warning(self, "Warning", "base.json not found. Cannot reset to default values.")
+                QMessageBox.warning(self, "Warning", "default.json not found. Cannot reset to default values.")
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to load base.json: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to load default.json: {e}")
             return
     
     def save_config(self):
@@ -220,7 +220,7 @@ class AdvancedSettingsDialog(QDialog):
             }
             
             # Save to base.json
-            base_path = Path("base.json")
+            base_path = Path(resource_path("base.json"))
             with open(base_path, "w") as f:
                 json.dump(base_config, f, indent=4)
             
@@ -1341,7 +1341,7 @@ class MainWindow(QMainWindow):
         
         # Load base.json if it exists
         base_config = {}
-        base_path = Path("base.json")
+        base_path = Path(resource_path("base.json"))
         if base_path.exists():
             try:
                 with open(base_path, "r") as f:

@@ -16,12 +16,24 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
 from PyQt6.QtCore import Qt, QSize, QThread, pyqtSignal, QTimer
 from PyQt6.QtCore import Qt as QtCore
 from PyQt6.QtGui import QIcon, QPixmap, QAction, QFont
+import sys
+import os
 
 # Import custom modules
 from utils.proxy_parser import parse_ss_url, parse_vmess_url, parse_vless_url
 from utils.xray_config import generate_xray_config, save_config
 from utils.xray_process import XrayProcessManager
 from utils.system_proxy import SystemProxyManager
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+        
+    return os.path.join(base_path, relative_path)
 
 class AdvancedSettingsDialog(QDialog):
     def __init__(self, parent=None):
@@ -226,12 +238,12 @@ class AdvancedSettingsDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("ProxyCloud - Modern UI")
-        self.setWindowIcon(QIcon("icons/app.svg"))
+        self.setWindowTitle("ProxyCloud")
+        self.setWindowIcon(QIcon(resource_path("icons/app.svg")))
         self.setMinimumSize(900, 600)
         
         # Set application icon
-        app_icon = QIcon("icons/logo.ico")
+        app_icon = QIcon(resource_path("icons/logo.ico"))
         self.setWindowIcon(app_icon)
         
         # Initialize managers
@@ -451,28 +463,35 @@ class MainWindow(QMainWindow):
         """
         
         add_server_btn = QPushButton("Add Server")
-        add_server_btn.setIcon(QIcon("icons/add.svg"))
+        add_server_btn.setIcon(QIcon(resource_path("icons/add.svg")))
         add_server_btn.clicked.connect(self.add_server_dialog)
         add_server_btn.setStyleSheet(button_style)
         buttons_layout.addWidget(add_server_btn)
         
         import_btn = QPushButton("Import from URL")
-        import_btn.setIcon(QIcon("icons/import.svg"))
+        import_btn.setIcon(QIcon(resource_path("icons/import.svg")))
         import_btn.clicked.connect(self.import_from_url_dialog)
         import_btn.setStyleSheet(button_style)
         buttons_layout.addWidget(import_btn)
         
         remove_btn = QPushButton("Remove Selected")
-        remove_btn.setIcon(QIcon("icons/remove.svg"))
+        remove_btn.setIcon(QIcon(resource_path("icons/remove.svg")))
         remove_btn.clicked.connect(self.remove_selected_server)
         remove_btn.setStyleSheet(button_style)
         buttons_layout.addWidget(remove_btn)
         
         test_ping_btn = QPushButton("Test Ping")
-        test_ping_btn.setIcon(QIcon("icons/ping.svg"))
+        test_ping_btn.setIcon(QIcon(resource_path("icons/ping.svg")))
         test_ping_btn.clicked.connect(self.test_ping_all_servers)
         test_ping_btn.setStyleSheet(button_style)
         buttons_layout.addWidget(test_ping_btn)
+        
+        # Add refresh button to fetch servers from API
+        refresh_btn = QPushButton("Refresh Servers")
+        refresh_btn.setIcon(QIcon(resource_path("icons/import.svg")))
+        refresh_btn.clicked.connect(self.refresh_servers_from_api)
+        refresh_btn.setStyleSheet(button_style)
+        buttons_layout.addWidget(refresh_btn)
         
         home_layout.addWidget(button_container)
         
@@ -637,7 +656,7 @@ class MainWindow(QMainWindow):
         
         # Advanced settings button
         advanced_btn = QPushButton("Advanced Settings")
-        advanced_btn.setIcon(QIcon("icons/settings.svg"))
+        advanced_btn.setIcon(QIcon(resource_path("icons/settings.svg")))
         advanced_btn.setStyleSheet("""
             QPushButton {
                 margin-top: 10px;
@@ -715,7 +734,7 @@ class MainWindow(QMainWindow):
         logs_layout.addWidget(log_container, 1)
         
         clear_logs_btn = QPushButton("Clear Logs")
-        clear_logs_btn.setIcon(QIcon("icons/clear.svg"))
+        clear_logs_btn.setIcon(QIcon(resource_path("icons/clear.svg")))
         clear_logs_btn.setStyleSheet("""
             QPushButton {
                 margin-top: 10px;
@@ -729,9 +748,9 @@ class MainWindow(QMainWindow):
         logs_layout.addWidget(clear_logs_btn)
         
         # Add tabs to tab widget with icons
-        self.tabs.addTab(home_tab, QIcon("icons/home.svg"), "Home")
-        self.tabs.addTab(settings_tab, QIcon("icons/settings.svg"), "Settings")
-        self.tabs.addTab(logs_tab, QIcon("icons/logs.svg"), "Logs")
+        self.tabs.addTab(home_tab, QIcon(resource_path("icons/home.svg")), "Home")
+        self.tabs.addTab(settings_tab, QIcon(resource_path("icons/settings.svg")), "Settings")
+        self.tabs.addTab(logs_tab, QIcon(resource_path("icons/logs.svg")), "Logs")
         
         # Set tab size and style
         self.tabs.setIconSize(QSize(18, 18))
@@ -768,7 +787,7 @@ class MainWindow(QMainWindow):
     
     def setup_system_tray(self):
         # Create system tray icon
-        tray_icon_pixmap = QIcon("icons/logo.png")
+        tray_icon_pixmap = QIcon(resource_path("icons/logo.png"))
         self.tray_icon = QSystemTrayIcon(self)
         self.tray_icon.setIcon(tray_icon_pixmap)
         tray_menu = QMenu()
@@ -808,8 +827,111 @@ class MainWindow(QMainWindow):
             print(f"Error cleaning log files: {e}")
     
     def load_saved_configs(self):
-        # Load saved configurations
-        pass
+        # Load saved configurations and fetch new servers from API
+        from utils.api_client import fetch_configs_from_api
+        import threading
+        
+        # First load any saved configurations from settings
+        settings_dir = Path("settings")
+        settings_path = settings_dir / "settings.json"
+        
+        if settings_path.exists():
+            try:
+                with open(settings_path, "r") as f:
+                    settings = json.load(f)
+                # We'll still load saved servers from settings in the load_settings method
+                self.log_text.append("Loaded saved configurations")
+            except Exception as e:
+                self.log_text.append(f"Failed to load saved configurations: {e}")
+        
+        # Start fetching servers in a separate thread to avoid freezing the UI
+        threading.Thread(target=self.fetch_servers_with_retry, daemon=True).start()
+    
+    def refresh_servers_from_api(self):
+        # Manual refresh of servers from API
+        import threading
+        
+        # Disable the button while refreshing
+        sender = self.sender()
+        if sender:
+            original_text = sender.text()
+            sender.setText("Refreshing...")
+            sender.setEnabled(False)
+            
+            # Function to re-enable the button after refresh
+            def refresh_complete():
+                sender.setText(original_text)
+                sender.setEnabled(True)
+            
+            # Start fetching in a separate thread
+            thread = threading.Thread(
+                target=lambda: self.fetch_servers_with_retry(callback=refresh_complete),
+                daemon=True
+            )
+            thread.start()
+        else:
+            # If called programmatically without a sender
+            threading.Thread(target=self.fetch_servers_with_retry, daemon=True).start()
+    
+    def fetch_servers_with_retry(self, max_retries=3, callback=None):
+        # Function to fetch servers from API with retry capability
+        from utils.api_client import fetch_configs_from_api
+        
+        self.log_text.append("Fetching servers from API...")
+        success = False
+        
+        for attempt in range(max_retries):
+            try:
+                configs = fetch_configs_from_api()
+                if configs:
+                    # Clear existing servers if we successfully got new ones
+                    self.server_list.clear()
+                    
+                    # Add each server to the list
+                    for config in configs:
+                        item = QListWidgetItem(config.get('tag', 'Unknown Server'))
+                        item.setData(QtCore.ItemDataRole.UserRole, config)
+                        
+                        # Add icon based on protocol
+                        protocol = config.get('type', '').lower()
+                        if protocol == 'ss':
+                            item.setIcon(QIcon.fromTheme("network-vpn", QIcon(resource_path("icons/ss.svg"))))
+                        elif protocol == 'vmess':
+                            item.setIcon(QIcon.fromTheme("network-vpn", QIcon(resource_path("icons/vmess.svg"))))
+                        elif protocol == 'vless':
+                            item.setIcon(QIcon.fromTheme("network-vpn", QIcon(resource_path("icons/vless.svg"))))
+                        
+                        # Add to server list
+                        self.server_list.addItem(item)
+                    
+                    self.log_text.append(f"✅ Successfully fetched {len(configs)} servers from API")
+                    
+                    # Select the first server
+                    if self.server_list.count() > 0:
+                        self.server_list.setCurrentRow(0)
+                    
+                    # Save the fetched servers to settings
+                    self.save_settings()
+                    success = True
+                    break
+                else:
+                    self.log_text.append(f"⚠️ API returned no servers (Attempt {attempt+1}/{max_retries})")
+            except Exception as e:
+                self.log_text.append(f"❌ Failed to fetch servers from API: {e} (Attempt {attempt+1}/{max_retries})")
+            
+            # If this wasn't the last attempt, wait before retrying
+            if attempt < max_retries - 1:
+                time.sleep(2)  # Wait 2 seconds before retrying
+        
+        # If we get here and success is still False, all retries failed
+        if not success:
+            QMessageBox.warning(self, "API Connection Failed", 
+                              "Failed to fetch servers from API after multiple attempts. \n\n"
+                              "Please check your internet connection and try again later.")
+        
+        # Call the callback if provided (to re-enable button, etc.)
+        if callback:
+            callback()
     
     def toggle_connection(self):
         # Toggle VPN connection
@@ -846,9 +968,23 @@ class MainWindow(QMainWindow):
         # Generate Xray configuration
         xray_config = generate_xray_config(config_data, False)
         
-        # Save the configuration to a temporary file
-        config_dir = Path("configs")
-        config_dir.mkdir(exist_ok=True)
+        # Save the configuration to a temporary file in AppData
+        app_data = os.environ.get('APPDATA')
+        if app_data:
+            # On Windows, use AppData directory
+            config_dir = Path(app_data) / "ProxyCloud" / "configs"
+        else:
+            # Fallback to local configs directory
+            config_dir = Path("configs")
+            
+        # Ensure directory exists with proper permissions
+        try:
+            config_dir.mkdir(mode=0o755, parents=True, exist_ok=True)
+        except Exception as e:
+            self.log_text.append(f"Failed to create configs directory: {e}")
+            QMessageBox.critical(self, "Configuration Error", f"Failed to create configs directory: {e}")
+            return False
+            
         config_path = str(config_dir / "current_config.json")
         
         if save_config(xray_config, config_path):
@@ -1034,11 +1170,11 @@ class MainWindow(QMainWindow):
             # Add icon based on protocol
             protocol = config.get('type', '').lower()
             if protocol == 'ss':
-                item.setIcon(QIcon.fromTheme("network-vpn", QIcon("icons/ss.svg")))
+                item.setIcon(QIcon.fromTheme("network-vpn", QIcon(resource_path("icons/ss.svg"))))
             elif protocol == 'vmess':
-                item.setIcon(QIcon.fromTheme("network-vpn", QIcon("icons/vmess.svg")))
+                item.setIcon(QIcon.fromTheme("network-vpn", QIcon(resource_path("icons/vmess.svg"))))
             elif protocol == 'vless':
-                item.setIcon(QIcon.fromTheme("network-vpn", QIcon("icons/vless.svg")))
+                item.setIcon(QIcon.fromTheme("network-vpn", QIcon(resource_path("icons/vless.svg"))))
             
             # Add to server list
             self.server_list.addItem(item)
@@ -1214,15 +1350,46 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 self.log_text.append(f"Error loading base.json: {e}")
         
-        # Save to file
-        settings_dir = Path("settings")
-        settings_dir.mkdir(exist_ok=True)
+        # Save to file - use AppData for user-specific settings
+        app_data = os.environ.get('APPDATA')
+        if app_data:
+            # On Windows, use AppData directory
+            settings_dir = Path(app_data) / "ProxyCloud" / "settings"
+        else:
+            # Fallback to local settings directory
+            settings_dir = Path("settings")
+        
+        # Ensure directory exists with proper permissions
+        try:
+            if not settings_dir.exists():
+                settings_dir.mkdir(mode=0o755, parents=True, exist_ok=True)
+            elif not os.access(settings_dir, os.W_OK):
+                # Try to fix permissions if directory exists but isn't writable
+                os.chmod(settings_dir, 0o755)
+        except Exception as e:
+            self.log_text.append(f"Failed to create or set permissions on settings directory: {e}")
+            QMessageBox.critical(self, "Settings Error", f"Failed to create or access settings directory: {e}")
+            return
+            
         settings_path = settings_dir / "settings.json"
+        
+        # Check if file exists and is writable, or if we can create it
+        if settings_path.exists() and not os.access(settings_path, os.W_OK):
+            try:
+                # Try to make the file writable
+                os.chmod(settings_path, 0o644)
+            except Exception as e:
+                self.log_text.append(f"Failed to set permissions on settings file: {e}")
+                QMessageBox.critical(self, "Settings Error", f"Failed to access settings file: Permission denied\nsettings:\\settings.json")
+                return
         
         try:
             with open(settings_path, "w") as f:
                 json.dump(settings, f, indent=4)
             self.log_text.append("Settings saved")
+        except PermissionError:
+            self.log_text.append("Failed to save settings: Permission denied")
+            QMessageBox.critical(self, "Settings Error", f"Failed to save settings: Permission denied\nsettings:\\settings.json")
         except Exception as e:
             self.log_text.append(f"Failed to save settings: {e}")
             QMessageBox.critical(self, "Settings Error", f"Failed to save settings: {e}")
@@ -1231,10 +1398,27 @@ class MainWindow(QMainWindow):
         # Load settings
         import json
         
-        settings_dir = Path("settings")
+        # Use AppData for user-specific settings
+        app_data = os.environ.get('APPDATA')
+        if app_data:
+            # On Windows, use AppData directory
+            settings_dir = Path(app_data) / "ProxyCloud" / "settings"
+        else:
+            # Fallback to local settings directory
+            settings_dir = Path("settings")
         settings_path = settings_dir / "settings.json"
         
         if settings_path.exists():
+            # Check if file is readable
+            if not os.access(settings_path, os.R_OK):
+                try:
+                    # Try to make the file readable
+                    os.chmod(settings_path, 0o644)
+                except Exception as e:
+                    self.log_text.append(f"Failed to set permissions on settings file: {e}")
+                    QMessageBox.warning(self, "Settings Error", f"Failed to read settings file: Permission denied\nsettings:\\settings.json")
+                    return
+            
             try:
                 with open(settings_path, "r") as f:
                     settings = json.load(f)
@@ -1258,11 +1442,11 @@ class MainWindow(QMainWindow):
                     # Add icon based on protocol
                     protocol = config.get("type", "").lower()
                     if protocol == "ss":
-                        item.setIcon(QIcon.fromTheme("network-vpn", QIcon("icons/ss.svg")))
+                        item.setIcon(QIcon.fromTheme("network-vpn", QIcon(resource_path("icons/ss.svg"))))
                     elif protocol == "vmess":
-                        item.setIcon(QIcon.fromTheme("network-vpn", QIcon("icons/vmess.svg")))
+                        item.setIcon(QIcon.fromTheme("network-vpn", QIcon(resource_path("icons/vmess.svg"))))
                     elif protocol == "vless":
-                        item.setIcon(QIcon.fromTheme("network-vpn", QIcon("icons/vless.svg")))
+                        item.setIcon(QIcon.fromTheme("network-vpn", QIcon(resource_path("icons/vless.svg"))))
                     
                     # Add to server list
                     self.server_list.addItem(item)
@@ -1280,8 +1464,23 @@ class MainWindow(QMainWindow):
                 if settings.get("auto_connect", False) and self.server_list.count() > 0:
                     self.server_list.setCurrentRow(0)
                     self.connect()
+            except PermissionError:
+                self.log_text.append("Failed to load settings: Permission denied")
+                QMessageBox.warning(self, "Settings Error", f"Failed to load settings: Permission denied\nsettings:\\settings.json")
+            except json.JSONDecodeError:
+                self.log_text.append("Failed to load settings: Invalid JSON format")
+                QMessageBox.warning(self, "Settings Error", "Failed to load settings: The settings file is corrupted")
+                # Create a backup of the corrupted file
+                try:
+                    import shutil
+                    backup_path = settings_path.with_suffix(".json.bak")
+                    shutil.copy2(settings_path, backup_path)
+                    self.log_text.append(f"Created backup of corrupted settings file: {backup_path}")
+                except Exception as e:
+                    self.log_text.append(f"Failed to create backup of corrupted settings file: {e}")
             except Exception as e:
                 self.log_text.append(f"Failed to load settings: {e}")
+                QMessageBox.warning(self, "Settings Error", f"Failed to load settings: {e}")
         else:
             self.log_text.append("No settings file found, using defaults")
     
@@ -1307,8 +1506,86 @@ class MainWindow(QMainWindow):
                 self.disconnect()
             event.accept()
 
+def get_settings_dir():
+    """Get the appropriate settings directory path"""
+    app_data = os.environ.get('APPDATA')
+    if app_data:
+        # On Windows, use AppData directory
+        return Path(app_data) / "ProxyCloud" / "settings"
+    else:
+        # Fallback to local settings directory
+        return Path("settings")
+
+def migrate_settings():
+    """Migrate settings from old location to new AppData location"""
+    old_settings_dir = Path("settings")
+    old_settings_file = old_settings_dir / "settings.json"
+    
+    new_settings_dir = get_settings_dir()
+    new_settings_file = new_settings_dir / "settings.json"
+    
+    # If old settings exist and new settings don't, migrate them
+    if old_settings_file.exists() and not new_settings_file.exists():
+        try:
+            print(f"Migrating settings from {old_settings_file} to {new_settings_file}")
+            
+            # Ensure new directory exists
+            new_settings_dir.mkdir(mode=0o755, parents=True, exist_ok=True)
+            
+            # Copy settings file
+            with open(old_settings_file, 'r') as old_file:
+                settings_data = old_file.read()
+                
+            with open(new_settings_file, 'w') as new_file:
+                new_file.write(settings_data)
+                
+            # Set proper permissions
+            os.chmod(new_settings_file, 0o644)
+            
+            print("Settings migration completed successfully")
+        except Exception as e:
+            print(f"Error migrating settings: {e}")
+
+def check_settings_permissions():
+    """Check and fix permissions for settings directory and files"""
+    settings_dir = get_settings_dir()
+    
+    # Create settings directory if it doesn't exist
+    try:
+        if not settings_dir.exists():
+            settings_dir.mkdir(mode=0o755, parents=True, exist_ok=True)
+            print(f"Created settings directory: {settings_dir}")
+        elif not os.access(settings_dir, os.W_OK):
+            # Try to fix permissions if directory exists but isn't writable
+            os.chmod(settings_dir, 0o755)
+            print(f"Fixed permissions for settings directory: {settings_dir}")
+    except Exception as e:
+        print(f"Warning: Failed to create or set permissions on settings directory: {e}")
+        return False
+    
+    # Check settings.json if it exists
+    settings_path = settings_dir / "settings.json"
+    if settings_path.exists():
+        if not os.access(settings_path, os.R_OK | os.W_OK):
+            try:
+                # Try to make the file readable and writable
+                os.chmod(settings_path, 0o644)
+                print(f"Fixed permissions for settings file: {settings_path}")
+            except Exception as e:
+                print(f"Warning: Failed to set permissions on settings file: {e}")
+                return False
+    
+    return True
+
 def main():
     app = QApplication(sys.argv)
+    
+    # Migrate settings from old location to new AppData location if needed
+    migrate_settings()
+    
+    # Check and fix settings permissions before creating the main window
+    check_settings_permissions()
+    
     window = MainWindow()
     window.show()
     

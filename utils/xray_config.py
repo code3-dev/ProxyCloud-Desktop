@@ -312,14 +312,32 @@ def save_config(config: Dict[str, Any], config_path: str) -> bool:
     Save the Xray configuration to a file.
     """
     try:
-        # Ensure the directory exists
-        os.makedirs(os.path.dirname(config_path), exist_ok=True)
+        # Get directory path
+        dir_path = os.path.dirname(config_path)
+        
+        # Ensure the directory exists with proper permissions
+        os.makedirs(dir_path, exist_ok=True)
+        
+        # Set directory permissions
+        try:
+            os.chmod(dir_path, 0o755)  # rwxr-xr-x
+        except Exception as e:
+            print(f"Warning: Could not set directory permissions: {e}")
         
         # Write the configuration to file
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
         
+        # Set file permissions
+        try:
+            os.chmod(config_path, 0o644)  # rw-r--r--
+        except Exception as e:
+            print(f"Warning: Could not set file permissions: {e}")
+        
         return True
+    except PermissionError as e:
+        print(f"Permission error saving configuration: {e}")
+        return False
     except Exception as e:
         print(f"Error saving configuration: {e}")
         return False

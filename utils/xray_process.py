@@ -13,6 +13,7 @@ class XrayProcessManager:
         self.config_path = None
         self.xray_path = self._get_xray_path()
         self.is_running = False
+        self.log_dir = self._get_log_dir()
     
     def _get_xray_path(self) -> str:
         """
@@ -24,6 +25,27 @@ class XrayProcessManager:
             return str(base_dir / "xray" / "win" / "xray.exe")
         else:  # Linux, Darwin, etc.
             return str(base_dir / "xray" / "linux" / "xray")
+            
+    def _get_log_dir(self) -> Path:
+        """
+        Get the directory for Xray logs, using AppData on Windows.
+        """
+        if platform.system() == "Windows":
+            app_data = os.environ.get('APPDATA')
+            if app_data:
+                log_dir = Path(app_data) / "ProxyCloud" / "logs"
+            else:
+                log_dir = Path("logs")
+        else:
+            log_dir = Path("logs")
+            
+        # Ensure the directory exists with proper permissions
+        try:
+            log_dir.mkdir(mode=0o755, parents=True, exist_ok=True)
+        except Exception as e:
+            print(f"Warning: Failed to create log directory: {e}")
+            
+        return log_dir
     
     def start(self, config_path: str) -> bool:
         """
@@ -39,11 +61,27 @@ class XrayProcessManager:
             if platform.system() != "Windows":
                 os.chmod(self.xray_path, 0o755)
             
-            # Start the Xray process
+            # Create log files in the log directory
+            log_time = time.strftime("%Y%m%d-%H%M%S")
+            stdout_log = self.log_dir / f"xray-stdout-{log_time}.log"
+            stderr_log = self.log_dir / f"xray-stderr-{log_time}.log"
+            
+            # Open log files with proper permissions
+            stdout_file = open(stdout_log, "w")
+            stderr_file = open(stderr_log, "w")
+            
+            # Set file permissions
+            try:
+                os.chmod(stdout_log, 0o644)
+                os.chmod(stderr_log, 0o644)
+            except Exception as e:
+                print(f"Warning: Failed to set log file permissions: {e}")
+            
+            # Start the Xray process with log redirection
             self.process = subprocess.Popen(
                 [self.xray_path, "-config", config_path],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=stdout_file,
+                stderr=stderr_file,
                 creationflags=subprocess.CREATE_NO_WINDOW if platform.system() == "Windows" else 0
             )
             
@@ -53,11 +91,17 @@ class XrayProcessManager:
                 self.is_running = True
                 return True
             else:
-                error_output = self.process.stderr.read().decode('utf-8')
+                # Read error from the log file
+                stderr_file.close()
+                with open(stderr_log, "r") as f:
+                    error_output = f.read()
                 print(f"Failed to start Xray: {error_output}")
                 return False
         except Exception as e:
             print(f"Error starting Xray: {e}")
+            return False
+        except PermissionError as pe:
+            print(f"Permission error starting Xray: {pe}")
             return False
     
     def stop(self) -> bool:
@@ -88,6 +132,19 @@ class XrayProcessManager:
                     self.process.kill()
                 else:
                     os.kill(self.process.pid, signal.SIGKILL)
+            
+            # Close stdout and stderr if they're still open
+            if hasattr(self.process, 'stdout') and self.process.stdout:
+                try:
+                    self.process.stdout.close()
+                except:
+                    pass
+                    
+            if hasattr(self.process, 'stderr') and self.process.stderr:
+                try:
+                    self.process.stderr.close()
+                except:
+                    pass
             
             # Kill any remaining Xray processes with the same executable path
             self._kill_remaining_xray_processes()

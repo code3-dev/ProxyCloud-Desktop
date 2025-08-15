@@ -4,6 +4,15 @@
 # PyInstaller spec files
 *.spec
 
+# Installer files
+*.msi
+*.dmg
+*.pkg
+
+# App Manifest
+*.manifest
+
+
 # Log files
 *.log
 

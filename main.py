@@ -24,16 +24,7 @@ from utils.proxy_parser import parse_ss_url, parse_vmess_url, parse_vless_url
 from utils.xray_config import generate_xray_config, save_config
 from utils.xray_process import XrayProcessManager
 from utils.system_proxy import SystemProxyManager
-
-def resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller """
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-        
-    return os.path.join(base_path, relative_path)
+from utils.resource_utils import resource_path
 
 class AdvancedSettingsDialog(QDialog):
     def __init__(self, parent=None):
@@ -112,10 +103,26 @@ class AdvancedSettingsDialog(QDialog):
     def load_base_config(self):
         import json
         
-        # First try to load from settings.json
-        settings_dir = Path("settings")
+        # First try to load from base.json
+        base_path = Path(resource_path("base.json"))
+        if base_path.exists():
+            try:
+                with open(base_path, "r") as f:
+                    config = json.load(f)
+                self.load_config_data(config)
+                return
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to load base configuration: {e}")
+        
+        # If not found in base.json, try settings.json
+        app_data = os.environ.get('APPDATA')
+        if app_data:
+            # On Windows, use AppData directory
+            settings_dir = Path(app_data) / "ProxyCloud" / "settings"
+        else:
+            # Fallback to local settings directory
+            settings_dir = Path("settings")
         settings_path = settings_dir / "settings.json"
-        base_config = None
         
         if settings_path.exists():
             try:
@@ -128,17 +135,7 @@ class AdvancedSettingsDialog(QDialog):
             except Exception as e:
                 QMessageBox.warning(self, "Warning", f"Failed to load settings: {e}")
         
-        # If not found in settings.json, try default.json
-        base_path = Path(resource_path("default.json"))
-        if base_path.exists():
-            try:
-                with open(base_path, "r") as f:
-                    config = json.load(f)
-                self.load_config_data(config)
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to load base configuration: {e}")
-        else:
-            QMessageBox.warning(self, "Warning", "Base configuration file not found.")
+        QMessageBox.warning(self, "Warning", "Base configuration file not found.")
     
     def load_config_data(self, config):
         import json
@@ -194,6 +191,9 @@ class AdvancedSettingsDialog(QDialog):
                 # Keep outbound as is (read-only)
                 self.outbound_editor.setText(json.dumps(current_outbound, indent=4))
                 
+                # Save the reset configuration to base.json
+                self.save_config()
+                
                 QMessageBox.information(self, "Reset Complete", "Settings have been reset to default values from default.json.")
             else:
                 QMessageBox.warning(self, "Warning", "default.json not found. Cannot reset to default values.")
@@ -226,7 +226,8 @@ class AdvancedSettingsDialog(QDialog):
             
             # Update settings.json if parent exists
             if self.parent:
-                self.parent.save_settings()
+                # Force the parent to update settings.json with the new base_config
+                self.parent.save_settings(force_base_config=base_config)
             
             QMessageBox.information(self, "Success", "Configuration saved successfully.")
             self.accept()
@@ -830,9 +831,16 @@ class MainWindow(QMainWindow):
         # Load saved configurations and fetch new servers from API
         from utils.api_client import fetch_configs_from_api
         import threading
+        import json
         
         # First load any saved configurations from settings
-        settings_dir = Path("settings")
+        app_data = os.environ.get('APPDATA')
+        if app_data:
+            # On Windows, use AppData directory
+            settings_dir = Path(app_data) / "ProxyCloud" / "settings"
+        else:
+            # Fallback to local settings directory
+            settings_dir = Path("settings")
         settings_path = settings_dir / "settings.json"
         
         if settings_path.exists():
@@ -841,6 +849,14 @@ class MainWindow(QMainWindow):
                     settings = json.load(f)
                 # We'll still load saved servers from settings in the load_settings method
                 self.log_text.append("Loaded saved configurations")
+                
+                # Load base config from settings if it exists
+                if "base_config" in settings:
+                    # Save to base.json for use by other components
+                    base_path = Path(resource_path("base.json"))
+                    with open(base_path, "w") as f:
+                        json.dump(settings["base_config"], f, indent=4)
+                    self.log_text.append("Loaded saved base configuration")
             except Exception as e:
                 self.log_text.append(f"Failed to load saved configurations: {e}")
         
@@ -1320,7 +1336,7 @@ class MainWindow(QMainWindow):
         dialog = AdvancedSettingsDialog(self)
         dialog.exec()
     
-    def save_settings(self):
+    def save_settings(self, force_base_config=None):
         # Save settings
         import json
         
@@ -1339,16 +1355,27 @@ class MainWindow(QMainWindow):
             if config:
                 settings["servers"].append(config)
         
-        # Load base.json if it exists
-        base_config = {}
-        base_path = Path(resource_path("base.json"))
-        if base_path.exists():
+        # Use forced base_config if provided, otherwise load from file
+        if force_base_config is not None:
+            settings["base_config"] = force_base_config
+            # Also save to base.json to ensure consistency
+            base_path = Path(resource_path("base.json"))
             try:
-                with open(base_path, "r") as f:
-                    base_config = json.load(f)
-                settings["base_config"] = base_config
+                with open(base_path, "w") as f:
+                    json.dump(force_base_config, f, indent=4)
             except Exception as e:
-                self.log_text.append(f"Error loading base.json: {e}")
+                self.log_text.append(f"Error saving to base.json: {e}")
+        else:
+            # Load base.json if it exists
+            base_config = {}
+            base_path = Path(resource_path("base.json"))
+            if base_path.exists():
+                try:
+                    with open(base_path, "r") as f:
+                        base_config = json.load(f)
+                    settings["base_config"] = base_config
+                except Exception as e:
+                    self.log_text.append(f"Error loading base.json: {e}")
         
         # Save to file - use AppData for user-specific settings
         app_data = os.environ.get('APPDATA')

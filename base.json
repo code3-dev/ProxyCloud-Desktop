@@ -75,100 +75,6 @@
             }
         ]
     },
-    "inbounds": [
-        {
-            "listen": "127.0.0.1",
-            "port": 10808,
-            "protocol": "socks",
-            "settings": {
-                "auth": "noauth",
-                "udp": true,
-                "userLevel": 8
-            },
-            "sniffing": {
-                "destOverride": [
-                    "http",
-                    "tls"
-                ],
-                "enabled": true,
-                "routeOnly": false
-            },
-            "tag": "socks"
-        }
-    ],
-    "log": {
-        "loglevel": "warning"
-    },
-    "outbounds": [
-        {
-            "mux": {
-                "concurrency": -1,
-                "enabled": false
-            },
-            "protocol": "vmess",
-            "settings": {
-                "vnext": [
-                    {
-                        "address": "83.147.18.85",
-                        "port": 8080,
-                        "users": [
-                            {
-                                "id": "c33efb6d-6b67-d94f-4aa6-354da894bd2e",
-                                "level": 8,
-                                "security": "auto"
-                            }
-                        ]
-                    }
-                ]
-            },
-            "streamSettings": {
-                "network": "tcp",
-                "security": "none",
-                "tcpSettings": {
-                    "header": {
-                        "request": {
-                            "headers": {
-                                "Connection": [
-                                    "keep-alive"
-                                ],
-                                "Pragma": "no-cache",
-                                "Accept-Encoding": [
-                                    "gzip, deflate"
-                                ],
-                                "User-Agent": [
-                                    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36"
-                                ]
-                            },
-                            "method": "GET",
-                            "path": [
-                                "/"
-                            ],
-                            "version": "1.1"
-                        },
-                        "type": "http"
-                    }
-                }
-            },
-            "tag": "proxy"
-        },
-        {
-            "protocol": "freedom",
-            "settings": {
-                "domainStrategy": "UseIP"
-            },
-            "tag": "direct"
-        },
-        {
-            "protocol": "blackhole",
-            "settings": {
-                "response": {
-                    "type": "http"
-                }
-            },
-            "tag": "block"
-        }
-    ],
-    "remarks": "🚀 🇬🇧 ProxyCloud UK",
     "routing": {
         "domainStrategy": "AsIs",
         "rules": [
@@ -283,5 +189,74 @@
                 "type": "field"
             }
         ]
-    }
+    },
+    "outbounds": [
+        {
+            "mux": {
+                "concurrency": -1,
+                "enabled": false
+            },
+            "protocol": "vmess",
+            "settings": {
+                "vnext": [
+                    {
+                        "address": "83.147.18.85",
+                        "port": 8080,
+                        "users": [
+                            {
+                                "id": "c33efb6d-6b67-d94f-4aa6-354da894bd2e",
+                                "level": 8,
+                                "security": "auto"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "streamSettings": {
+                "network": "tcp",
+                "security": "none",
+                "tcpSettings": {
+                    "header": {
+                        "request": {
+                            "headers": {
+                                "Connection": [
+                                    "keep-alive"
+                                ],
+                                "Pragma": "no-cache",
+                                "Accept-Encoding": [
+                                    "gzip, deflate"
+                                ],
+                                "User-Agent": [
+                                    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36"
+                                ]
+                            },
+                            "method": "GET",
+                            "path": [
+                                "/"
+                            ],
+                            "version": "1.1"
+                        },
+                        "type": "http"
+                    }
+                }
+            },
+            "tag": "proxy"
+        },
+        {
+            "protocol": "freedom",
+            "settings": {
+                "domainStrategy": "UseIP"
+            },
+            "tag": "direct"
+        },
+        {
+            "protocol": "blackhole",
+            "settings": {
+                "response": {
+                    "type": "http"
+                }
+            },
+            "tag": "block"
+        }
+    ]
 }

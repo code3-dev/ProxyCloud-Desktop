@@ -1,13 +1,11 @@
 import json
 import os
 import stat
-import sys
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 # Import resource_path function
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from main import resource_path
+from utils.resource_utils import resource_path
 
 def generate_xray_config(proxy_config: Dict[str, Any], tun_mode: bool = False) -> Dict[str, Any]:
     """

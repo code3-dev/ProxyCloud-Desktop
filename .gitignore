@@ -1,0 +1,30 @@
+# Executables
+*.exe
+
+# PyInstaller spec files
+*.spec
+
+# Log files
+*.log
+
+# Build and distribution directories
+build/
+dist/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Settings and configs that might contain sensitive data
+settings/settings.json
+configs/current_config.json
+
+# Environment variables
+.env
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
